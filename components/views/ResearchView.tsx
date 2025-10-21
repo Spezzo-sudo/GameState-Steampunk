@@ -21,7 +21,9 @@ const ResearchView: React.FC = () => {
             .filter(item => item.entityId === tech.id)
             .reduce((max, item) => Math.max(max, item.level), currentLevel);
 
-          const costForNextUpgrade = getUpgradeCost(tech, targetLevel);
+          const nextLevel = targetLevel + 1;
+
+          const costForNextUpgrade = getUpgradeCost(tech, nextLevel);
           const buildTime = getBuildTime(costForNextUpgrade);
           const isUpgrading = buildQueue.some(item => item.entityId === tech.id);
           const affordable = canAfford(costForNextUpgrade);

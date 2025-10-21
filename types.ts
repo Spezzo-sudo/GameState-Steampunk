@@ -18,6 +18,8 @@ export interface Building {
   productionMultiplier?: number;
   baseEnergyConsumption?: number;
   energyConsumptionMultiplier?: number;
+  baseEnergySupply?: number;
+  energySupplyMultiplier?: number;
 }
 
 export interface Research {
@@ -43,9 +45,24 @@ export interface BuildQueueItem {
   endTime: number;
 }
 
+export interface AxialCoordinates {
+  q: number;
+  r: number;
+}
+
+export enum PlanetBiome {
+  Messingwueste = 'Messingwueste',
+  Aethermoor = 'Aethermoor',
+  Dampfarchipel = 'Dampfarchipel',
+  Uhrwerksteppe = 'Uhrwerksteppe',
+  Glimmerkluft = 'Glimmerkluft',
+}
+
 export interface Planet {
   coordinates: string;
   name: string;
   player: string;
   isOwnPlanet: boolean;
+  biome: PlanetBiome;
+  axial: AxialCoordinates;
 }

@@ -16,14 +16,20 @@ import {
   RESEARCH,
   TICK_INTERVAL,
   SERVER_SPEED,
+  INITIAL_BUILDING_LEVELS,
+  INITIAL_RESEARCH_LEVELS,
+  MAX_BUILD_QUEUE_LENGTH,
 } from '../constants';
+import { calculateKesseldruck, calculateResourceProductionPerTick } from '../lib/economy';
 
 type GameState = {
   resources: Resources;
   storage: Storage;
   kesseldruck: {
-    current: number;
     capacity: number;
+    consumption: number;
+    net: number;
+    efficiency: number;
   };
   buildings: Record<string, number>;
   research: Record<string, number>;
@@ -35,26 +41,25 @@ type GameActions = {
   setView: (view: View) => void;
   gameTick: () => void;
   canAfford: (cost: Resources) => boolean;
-  getUpgradeCost: (entity: Building | Research, level: number) => Resources;
+  getUpgradeCost: (entity: Building | Research, targetLevel: number) => Resources;
   getBuildTime: (cost: Resources) => number;
   startUpgrade: (entity: Building | Research) => void;
 };
 
+const RESOURCE_TYPES = Object.values(ResourceType) as ResourceType[];
+
+const createInitialKesseldruck = () => calculateKesseldruck(INITIAL_BUILDING_LEVELS);
+
+/**
+ * Central Zustand store that manages the client-side simulation and progression state.
+ */
 export const useGameStore = create<GameState & GameActions>()(
   immer((set, get) => ({
-    resources: INITIAL_RESOURCES,
-    storage: INITIAL_STORAGE,
-    kesseldruck: {
-      current: 0,
-      capacity: 0,
-    },
-    buildings: {
-      orichalkumMine: 1,
-      fokuskristallSynthesizer: 1,
-      vitriolHarvester: 0,
-      kesseldruckRegulator: 1,
-    },
-    research: {},
+    resources: { ...INITIAL_RESOURCES },
+    storage: { ...INITIAL_STORAGE },
+    kesseldruck: { ...createInitialKesseldruck() },
+    buildings: { ...INITIAL_BUILDING_LEVELS },
+    research: { ...INITIAL_RESEARCH_LEVELS },
     activeView: View.Uebersicht,
     buildQueue: [],
 
@@ -69,13 +74,14 @@ export const useGameStore = create<GameState & GameActions>()(
       );
     },
 
-    getUpgradeCost: (entity, level) => {
+    getUpgradeCost: (entity, targetLevel) => {
       const cost: Resources = {
         [ResourceType.Orichalkum]: 0,
         [ResourceType.Fokuskristalle]: 0,
         [ResourceType.Vitriol]: 0,
       };
-      const multiplier = Math.pow(entity.costMultiplier, level);
+      const exponent = Math.max(0, targetLevel - 1);
+      const multiplier = Math.pow(entity.costMultiplier, exponent);
       cost[ResourceType.Orichalkum] = Math.floor(entity.baseCost[ResourceType.Orichalkum] * multiplier);
       cost[ResourceType.Fokuskristalle] = Math.floor(entity.baseCost[ResourceType.Fokuskristalle] * multiplier);
       cost[ResourceType.Vitriol] = Math.floor(entity.baseCost[ResourceType.Vitriol] * multiplier);
@@ -83,9 +89,12 @@ export const useGameStore = create<GameState & GameActions>()(
     },
     
     getBuildTime: (cost) => {
-        const totalCost = cost.Orichalkum + cost.Fokuskristalle * 2 + cost.Vitriol * 3;
-        const timeInSeconds = Math.max(5, Math.floor(totalCost / 10 / SERVER_SPEED));
-        return timeInSeconds;
+      const totalCost =
+        cost[ResourceType.Orichalkum] +
+        cost[ResourceType.Fokuskristalle] * 2 +
+        cost[ResourceType.Vitriol] * 3;
+      const timeInSeconds = Math.max(5, Math.floor(totalCost / 10 / SERVER_SPEED));
+      return timeInSeconds;
     },
 
     startUpgrade: (entity) => {
@@ -97,21 +106,22 @@ export const useGameStore = create<GameState & GameActions>()(
             .filter(item => item.entityId === entity.id)
             .reduce((max, item) => Math.max(max, item.level), currentLevel);
 
-        const targetLevel = lastQueuedLevel + 1;
+        const nextLevel = lastQueuedLevel + 1;
 
-        const cost = get().getUpgradeCost(entity, targetLevel - 1);
-        if (!get().canAfford(cost) || state.buildQueue.length >= 3) return;
+        const cost = get().getUpgradeCost(entity, nextLevel);
+        if (!get().canAfford(cost) || state.buildQueue.length >= MAX_BUILD_QUEUE_LENGTH) return;
 
         state.resources[ResourceType.Orichalkum] -= cost[ResourceType.Orichalkum];
         state.resources[ResourceType.Fokuskristalle] -= cost[ResourceType.Fokuskristalle];
         state.resources[ResourceType.Vitriol] -= cost[ResourceType.Vitriol];
-        
+
         const buildTime = get().getBuildTime(cost);
-        const lastItemEndTime = state.buildQueue.length > 0 ? state.buildQueue[state.buildQueue.length - 1].endTime : Date.now();
-        const startTime = lastItemEndTime;
+        const now = Date.now();
+        const lastItemEndTime = state.buildQueue.length > 0 ? state.buildQueue[state.buildQueue.length - 1].endTime : now;
+        const startTime = Math.max(now, lastItemEndTime);
         const endTime = startTime + buildTime * 1000;
-        
-        state.buildQueue.push({ entityId: entity.id, level: targetLevel, startTime, endTime });
+
+        state.buildQueue.push({ entityId: entity.id, level: nextLevel, startTime, endTime });
       });
     },
 
@@ -139,42 +149,21 @@ export const useGameStore = create<GameState & GameActions>()(
         }
 
         // 2. Calculate energy production and consumption
-        const kesselLevel = state.buildings.kesseldruckRegulator || 0;
-        const kesselRegulator = BUILDINGS.kesseldruckRegulator;
-        const energyCapacity = kesselLevel > 0 ? Math.floor(30 * Math.pow(kesselRegulator.productionMultiplier!, kesselLevel)) : 0;
-        
-        let energyConsumption = 0;
-        Object.values(BUILDINGS).forEach(b => {
-          if (b.baseEnergyConsumption && state.buildings[b.id] > 0) {
-            energyConsumption += Math.floor(b.baseEnergyConsumption * Math.pow(b.energyConsumptionMultiplier!, state.buildings[b.id]));
-          }
-        });
-        state.kesseldruck.capacity = energyCapacity;
-        state.kesseldruck.current = energyConsumption;
+        const kesseldruckState = calculateKesseldruck(state.buildings);
+        state.kesseldruck.capacity = kesseldruckState.capacity;
+        state.kesseldruck.consumption = kesseldruckState.consumption;
+        state.kesseldruck.net = kesseldruckState.net;
+        state.kesseldruck.efficiency = kesseldruckState.efficiency;
 
-        const productionEfficiency = Math.min(1, energyCapacity / (energyConsumption || 1));
+        const income = calculateResourceProductionPerTick(
+          state.buildings,
+          SERVER_SPEED,
+          kesseldruckState.efficiency
+        );
 
-
-        // 3. Calculate and add resources
-        Object.values(BUILDINGS).forEach((building) => {
-          const level = state.buildings[building.id];
-          if (level && building.baseProduction) { // level > 0
-            const levelMultiplier = Math.pow(building.productionMultiplier!, level - 1);
-            
-            const updateResource = (resourceType: ResourceType) => {
-                const baseProd = building.baseProduction![resourceType];
-                if (baseProd > 0) {
-                    // Formula based on spec: prod = base * level * mult^(level-1)
-                    const productionPerHour = baseProd * level * levelMultiplier;
-                    const productionPerSecond = (productionPerHour / 3600) * SERVER_SPEED * productionEfficiency;
-                    state.resources[resourceType] = Math.min(state.storage[resourceType], state.resources[resourceType] + productionPerSecond);
-                }
-            };
-            
-            updateResource(ResourceType.Orichalkum);
-            updateResource(ResourceType.Fokuskristalle);
-            updateResource(ResourceType.Vitriol);
-          }
+        (RESOURCE_TYPES as ResourceType[]).forEach((resource) => {
+          const nextAmount = state.resources[resource] + income[resource];
+          state.resources[resource] = Math.min(state.storage[resource], nextAmount);
         });
       });
     },
