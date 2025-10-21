@@ -1,6 +1,7 @@
 import React from 'react';
 // FIX: Die Typen-Importe wurden in einer Zeile zusammengefasst.
 import { Resources, ResourceType } from '../../types';
+import { MAX_BUILD_QUEUE_LENGTH } from '../../constants';
 
 interface GameCardProps {
   name: string;
@@ -33,7 +34,7 @@ const CostDisplay: React.FC<{ cost: Resources }> = ({ cost }) => (
 
 
 const GameCard: React.FC<GameCardProps> = ({ name, level, targetLevel, description, upgradeCost, buildTime, canAfford, onUpgrade, isUpgrading, queueLength }) => {
-  const queueIsFull = queueLength >= 3;
+  const queueIsFull = queueLength >= MAX_BUILD_QUEUE_LENGTH;
   const isDisabled = !canAfford || queueIsFull;
 
   let buttonText = 'Ausbauen';
@@ -46,7 +47,7 @@ const GameCard: React.FC<GameCardProps> = ({ name, level, targetLevel, descripti
     buttonText = 'Nicht genug Ressourcen';
   }
   if (queueIsFull) {
-    buttonText = 'Warteschlange voll';
+    buttonText = `Warteschlange voll (max. ${MAX_BUILD_QUEUE_LENGTH})`;
   }
 
   return (

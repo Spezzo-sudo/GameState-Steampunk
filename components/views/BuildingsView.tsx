@@ -20,12 +20,14 @@ const BuildingsView: React.FC = () => {
           const targetLevel = buildQueue
             .filter(item => item.entityId === building.id)
             .reduce((max, item) => Math.max(max, item.level), currentLevel);
-          
-          const costForNextUpgrade = getUpgradeCost(building, targetLevel);
+
+          const nextLevel = targetLevel + 1;
+
+          const costForNextUpgrade = getUpgradeCost(building, nextLevel);
           const buildTime = getBuildTime(costForNextUpgrade);
           const isUpgrading = buildQueue.some(item => item.entityId === building.id);
           const affordable = canAfford(costForNextUpgrade);
-          
+
           return (
             <GameCard
               key={building.id}

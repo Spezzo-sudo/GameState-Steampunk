@@ -1,4 +1,5 @@
 import React from 'react';
+import { BIOME_STYLES } from '../../constants';
 import { Planet } from '../../types';
 
 interface GalaxyActionModalProps {
@@ -19,12 +20,14 @@ const GalaxyActionModal: React.FC<GalaxyActionModalProps> = ({ planet, onClose }
     onClose();
   };
 
+  const biome = BIOME_STYLES[planet.biome];
+
   return (
-    <div 
+    <div
         className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
         onClick={onClose} // Schließt das Modal bei Klick auf den Hintergrund
     >
-      <div 
+      <div
         className="steampunk-glass steampunk-border p-6 rounded-lg w-full max-w-md mx-4"
         onClick={(e) => e.stopPropagation()} // Verhindert, dass Klicks im Modal das Modal schließen
       >
@@ -33,7 +36,8 @@ const GalaxyActionModal: React.FC<GalaxyActionModalProps> = ({ planet, onClose }
             <button onClick={onClose} className="text-2xl text-gray-400 hover:text-white">&times;</button>
         </div>
         
-        <p className="text-gray-400 mb-6">Koordinaten: {planet.coordinates} | Spieler: {planet.player}</p>
+        <p className="text-gray-400 mb-2">Koordinaten: {planet.coordinates} | Spieler: {planet.player}</p>
+        <p className="text-gray-400 mb-6">Biom: {biome.label}</p>
 
         <div className="space-y-4">
             <button 
